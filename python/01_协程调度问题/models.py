@@ -4,9 +4,8 @@
 # @Desc    :
 from typing import Dict
 
-from pydantic import BaseModel
-
 import db
+from pydantic import BaseModel
 
 
 class UserRegistrationRequest(BaseModel):
