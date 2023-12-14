@@ -1,9 +1,10 @@
 ## Python协程在并发场景下的调度问题
 
-> 案例背景：之前我做过的项目中，有一个小程序，其中有一段逻辑是关于小程序用户注册的，具体的逻辑如下：
+> 案例背景：之前我做过的项目中，有一个小程序，其中有一段逻辑是关于小程序用户注册的，具体的逻辑如下：  
 > 每当有一个用户打开小程序后，如果该用户没有注册过，则会调用后端的注册接口进行注册传递小程序用户识别的一些信息,
 > 后端代码在实现过程中会基于小程序唯一识别信息`openid`来进行判断该用户是否已注册。
 > 该接口一直运行的也没啥问题，直到有一次我们在对对用户数据表进行数据处理时，偶然发现小程序用户表里 `minip_user`竟然有少量的重复数据，也就是同一个 `openid`的记录不止 1条
+
 
 
 ## 协程的简单介绍
@@ -142,21 +143,45 @@ select openid, count(openid) as total from users GROUP BY openid HAVING  total >
 
 ## Bug 原因分析
 从协程机制中可以看出，注册接口中的 `if not await models.check_user_exist_by_openid(user_info.openid):` 这个业务逻辑判重写法，当在较短时间内如果不存在用户请求重放，是没有太大问题的。  
-但是问题就是出在我们是并发的发起注册接口调用，并且每个用户注册请求都进行了回放，虽然我们批量注册的用户数量为 50，但因为回放的原因，总共发起了100 次注册请求，其中 50 次是重复的
+
+但是问题就是出在我们是并发的发起注册接口调用，并且每个用户注册请求都进行了回放，虽然我们批量注册的用户数量为 50，但因为回放的原因，总共发起了100 次注册请求，其中 50 次是重复的  
+
 当同一个用户的两次注册请求分别进行到 `check_user_exist_by_openid` 的这个函进行判重时，await 关键字会交出控制权并将自身放入到asyncio 管理的事件循环中，当事件循环在调度这两次判断重复的协程任务时，很有可能出现的场景：  
+
 因为是并发场景，所以在极短的时间内两个函数紧挨着的被事件循环所调用，然后去查 mysql 中的用户表，因为都发现数据库中没有对应的`openid`值，然后自然返回 False,执行插入操作，故而造成了数据重复的 bug。
 
 ## 如何避免上面的 Bug
 
-### 解决方案 1
+### 解决方案 1 - 唯一索引
 如果在业务上检查重复的字段是唯一性的，那么给该字段加上唯一索引，例如 `openid`字段
 ```sql
 ALTER TABLE users ADD UNIQUE INDEX idx_openid (openid)
 ```
 加上唯一索引后重复数据的插入就会报错`Duplicate entry 'xxxxx' for key 'idx_openid`
 
-### 解决方案 2
-todo
+### 解决方案 2 - Lock
+在 check_user_exist_by_openid 函数中使用 async with registration_lock 语句，通过 Lock 对象 registration_lock 来确保同一时刻只有一个协程能够执行判断用户是否存在的逻辑。这样就避免了并发情况下的重复插入问题。
+```python
+# db.py
+
+import asyncio
+from asyncio import Lock
+
+async def check_user_exist_by_openid(openid: str) -> bool:
+    """
+    判断 openid 相关的用户是否已存在
+    :param openid:
+    :return:
+    """
+    registration_lock = Lock()
+    async with registration_lock:
+        sql: str = "select * from users where openid = %s"
+        data = await db.user_db.get_first(sql, openid)
+        if data:
+            return True
+        return False
+
+```
 
 
 

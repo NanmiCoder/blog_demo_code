@@ -34,7 +34,7 @@ async def init_db():
 @app.post("/register")
 async def register_user(user_info: models.UserRegistrationRequest):
     """
-    注册用户
+    注册用户 - 普通拍版本
     :param user_info:
     :return:
     """
@@ -44,7 +44,30 @@ async def register_user(user_info: models.UserRegistrationRequest):
     return JSONResponse({"message": "注册失败，Openid已存在", "code": -1})
 
 
+@app.post("/register_asyncio_lock")
+async def register_user(user_info: models.UserRegistrationRequest):
+    """
+    注册用户 - 并发控制
+    :param user_info:
+    :return:
+    """
+    if not await models.check_user_exist_by_openid_use_asyncio_lock(user_info.openid):
+        await models.add_new_user(user_info.model_dump())
+        return JSONResponse({"message": "注册成功", "code": 0})
+    return JSONResponse({"message": "注册失败，Openid已存在", "code": -1})
 
+
+@app.post("/register_redis_lock")
+async def register_user(user_info: models.UserRegistrationRequest):
+    """
+    注册用户 - 分布式锁
+    :param user_info:
+    :return:
+    """
+    if not await models.check_user_exist_by_openid_use_asyncio_lock(user_info.openid):
+        await models.add_new_user(user_info.model_dump())
+        return JSONResponse({"message": "注册成功", "code": 0})
+    return JSONResponse({"message": "注册失败，Openid已存在", "code": -1})
 
 
 if __name__ == '__main__':
