@@ -11,7 +11,7 @@ import models
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel,Field
+from pydantic import BaseModel, Field
 
 app = FastAPI(debug=True)
 

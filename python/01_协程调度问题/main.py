@@ -3,15 +3,15 @@
 # @Time    : 2023/12/10 15:50
 # @Desc    : 模拟 API 业务请求代码
 import os
+import time
 
 import aiomysql
 import models
+import redis
 import uvicorn
 from db import init_pool
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-import redis
-import time
 
 app = FastAPI(debug=True)
 
